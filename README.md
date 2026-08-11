@@ -1,68 +1,96 @@
 # RPG Maker XP MCP Server
 
-**Author RPG Maker XP games in natural language.**
+**Build RPG Maker XP games by describing what you want.**
 
-A Model Context Protocol (MCP) server that reads and writes an RPG Maker XP
-project's Ruby 1.8 Marshal `.rxdata` files directly — actors, skills, items,
-maps, events, scripts, and system data — and renders map previews to PNG. Point
-an MCP client (Claude Desktop, Claude Code, …) at your project and create or
-edit game content by describing it.
+> *"Make a healing potion that restores 200 HP and costs 150 gold."*
+> *"Create a 40×30 forest map with a pond in the north-east, then show it to me."*
+> *"Find every NPC on map 3 whose dialogue mentions the king."*
 
-Built on a byte-verified Marshal codec (with a vendored decoder fix) and
-defaults that mirror the RMXP editor exactly, so edits round-trip cleanly.
+This is an [MCP](#what-is-mcp) server that reads and writes an RPG Maker XP
+project's `.rxdata` files directly — actors, skills, items, maps, events,
+scripts and system data — and renders map previews to PNG so you can see what
+was built without opening the editor.
 
-## How it works
+It talks to XP's native Ruby 1.8 Marshal format. Nothing is exported,
+converted, or kept in a side file: it edits your real project, and the editor
+opens the result normally.
 
-- `.rxdata` files are parsed with a vendored, bug-fixed copy of
-  [@hyrious/marshal](https://github.com/hyrious/marshal) (`src/vendor/marshal/`)
-  and converted to plain JSON. Ruby objects become `{ "_class": "RPG::Actor", ... }`
-  with instance variables as fields (no leading `@`).
-  The vendored fix: upstream ≤0.3.3 mis-decodes negative multibyte Marshal
-  integers (−150 → +106), which silently corrupted every healing skill
-  (negative power) on save. See `research/REPORT.md`.
-- The RGSS binary classes `Table` (tile/parameter grids), `Color` and `Tone`
-  have dedicated codecs (`{ "_class": "Table", dim, xsize, ysize, zsize, data }`).
-- On save, strings are written as raw byte strings (no Ruby 1.9 encoding ivars)
-  so files stay loadable by XP's Ruby 1.8 / RGSS104E.
-- The game title lives in `Game.ini` (not in System data, unlike MZ).
-- Round-trips of all 15 template `.rxdata` files from the RMXP install are
-  byte-identical.
+---
 
-## Quality-of-life behavior (research-driven)
+## ⚠️ Read this before your first run
 
-- **Automatic backups**: before the first write to any file in a session,
-  the original is copied to `Data/.mcp-backup/<name>.bak` (and the project
-  root for `Game.ini`).
-- **Save-revision marker**: map/event writes regenerate `System.magic_number`,
-  mirroring the editor, so existing save files reload the changed map
-  instead of keeping a stale copy.
-- **Event list invariants enforced**: command lists are normalized on save —
-  every command gets code/indent/parameters and the trailing
-  `{code: 0, indent: 0, parameters: []}` terminator is guaranteed.
-- **Verified engine math in the schemas**: skill tools document XP's actual
-  damage algorithm (extracted from `Game_Battler 3`), and the simplified
-  helpers are calibrated to the default-database conventions
-  (e.g. heals are negative power with `int_f` 50).
+**1. Close the RPG Maker XP editor while the server is running.**
+The editor holds all data files in memory and rewrites every one of them when
+you save. If it is open, it will overwrite anything this server changed. This
+is the single most common way to lose work.
+
+**2. Back up your project first.** Copy the whole `Data/` folder somewhere
+safe. Do this even though the server takes its own backups, because:
+
+**3. The automatic backup is not version history.** Before its first write to a
+file in a session, the server copies the original to `Data/.mcp-backup/`. That
+is **one `.bak` per file per session** — the next session overwrites it. It
+protects you from the last thing you did, not from something you broke a week
+ago. If your project matters, put it in git.
+
+**4. Test your game after changes.** A file can be structurally valid and still
+be wrong for your game.
+
+---
+
+## What is MCP?
+
+The Model Context Protocol is a standard way for AI assistants to use external
+tools. This server is not a chat program and has no interface of its own — it
+is a backend that an **MCP client** connects to.
+
+You need one of those clients. Common choices:
+
+- **[Claude Code](https://claude.com/claude-code)** — terminal-based
+- **[Claude Desktop](https://claude.ai/download)** — desktop app
+- **Open WebUI, Cursor, Windsurf, or any other MCP-capable client** — including
+  local models through Ollama ([see below](#using-a-local-model-via-ollama))
+
+If you have never used an MCP client, start with Claude Desktop; the
+[Configuration](#configuration) section has a copy-paste config.
+
+---
 
 ## Requirements
 
-- Node.js 18 or newer.
-- An RPG Maker XP project (a folder containing `Game.rxproj` and `Data/`).
-- To use the RTP assets (the default tiles, autotiles, characters, and audio),
-  you must own RPG Maker XP. The server reads them from your own installation at
-  runtime; it does not bundle or redistribute any engine assets.
+| | |
+|---|---|
+| **Node.js** | 18 or newer |
+| **An MCP client** | Claude Desktop, Claude Code, or any MCP-capable app |
+| **An RPG Maker XP project** | a folder containing `Game.rxproj` and `Data/` |
+| **RPG Maker XP itself** | required if your project uses RTP assets |
+
+The RTP (the default tiles, autotiles, character sprites and audio) is read
+from **your own installation** at runtime. This project does not bundle or
+redistribute any Enterbrain assets.
+
+### Does it work with Pokémon Essentials?
+
+Structurally, yes — Essentials games are RPG Maker XP projects, and every tool
+here operates on standard `.rxdata`. Two honest caveats: Essentials layers its
+own conventions on top of the engine (its own data files, a very large
+`Scripts.rxdata`, PBS text files) which this server knows nothing about, and
+its projects are big enough that you should be especially sure about backup
+point 2 above. Reading, map work and database edits behave normally.
+
+---
 
 ## Installation
 
-The published package ships a prebuilt server, so no build step is required.
-Most MCP clients can launch it on demand with `npx` (see Configuration), or you
-can install it explicitly:
+The published package ships prebuilt, so there is no build step. Most clients
+can launch it on demand with `npx`.
 
 ```bash
 npm install -g rpgmaker-xp-mcp
 ```
 
-### From source
+<details>
+<summary><b>From source</b></summary>
 
 ```bash
 git clone https://github.com/SerifeusStudio/rpgmaker-xp-mcp.git
@@ -71,12 +99,17 @@ npm install
 npm run build
 ```
 
+Then use `node` with the path to `dist/index.js` as the command in the configs
+below.
+</details>
+
+---
+
 ## Configuration
 
-Point the server at an RPG Maker XP project (the folder containing `Game.rxproj`
-and `Data/`) via the `RPGMAKER_PROJECT_PATH` environment variable. If your project
-relies on RTP assets in a non-default location, also set `RPGMAKER_RTP_PATH`; it
-defaults to the Steam RPG Maker XP install.
+Point the server at your project with `RPGMAKER_PROJECT_PATH` — the folder
+containing `Game.rxproj` and `Data/`. If your RTP lives somewhere unusual, also
+set `RPGMAKER_RTP_PATH`; it defaults to the Steam RPG Maker XP install.
 
 ### Claude Code
 
@@ -86,7 +119,9 @@ claude mcp add --scope user rpgmaker-xp \
   -- npx -y rpgmaker-xp-mcp
 ```
 
-### Claude Desktop (`%APPDATA%\Claude\claude_desktop_config.json`)
+### Claude Desktop
+
+`%APPDATA%\Claude\claude_desktop_config.json`:
 
 ```json
 {
@@ -102,282 +137,345 @@ claude mcp add --scope user rpgmaker-xp \
 }
 ```
 
-To run a local build instead of the published package, use `node` with the path
-to `dist/index.js` as the command.
+Restart the client, then check it connected by asking for something read-only:
 
-### Using with Ollama and other local models
+> *"List the actors in my project."*
 
-The server speaks standard MCP over stdio, so it is natively compatible with any
-MCP client, not only Claude. Ollama does not yet ship an MCP client of its own, so
-a local model reaches the server through a small bridge. Both options below reuse
-the same `mcpServers` configuration shape shown above.
+If you get names back, you are set up. See **[SETUP.md](SETUP.md)** for
+troubleshooting.
 
-**Open WebUI (recommended for a chat UI over Ollama).** Open WebUI has native MCP
-support and connects to stdio servers through [`mcpo`](https://github.com/open-webui/mcpo),
-an OpenAPI proxy. Save an `mcpo.json`:
+### Using a local model via Ollama
 
-```json
-{
-  "mcpServers": {
-    "rpgmaker-xp": {
-      "command": "npx",
-      "args": ["-y", "rpgmaker-xp-mcp"],
-      "env": { "RPGMAKER_PROJECT_PATH": "C:/path/to/your/xp/project" }
-    }
-  }
-}
-```
+The server speaks standard MCP over stdio, so it works with any MCP client, not
+only Claude. Ollama has no MCP client of its own yet, so a local model reaches
+it through a bridge.
 
-Run the proxy, then register it in Open WebUI:
+**Open WebUI** has native MCP support via
+[`mcpo`](https://github.com/open-webui/mcpo), an OpenAPI proxy. Save the same
+`mcpServers` block as `mcpo.json`, then:
 
 ```bash
 uvx mcpo --port 8000 --config mcpo.json
 ```
 
-In Open WebUI, add the tool server `http://localhost:8000/rpgmaker-xp` (its OpenAPI
-docs are at `/rpgmaker-xp/docs`). The tools become available to any Ollama model
-you have loaded.
+Register `http://localhost:8000/rpgmaker-xp` in Open WebUI as a tool server.
 
-**Terminal / TUI.** [`mcp-client-for-ollama`](https://github.com/jonigl/mcp-client-for-ollama)
-(`ollmcp`) connects one or more MCP servers directly to a local Ollama model using
-the same configuration shape.
+**Terminal:** [`ollmcp`](https://github.com/jonigl/mcp-client-for-ollama)
+connects MCP servers straight to a local Ollama model.
 
-Choose a model with capable tool calling (for example a recent Qwen or Llama
-instruct model). Smaller models can struggle to chain several tool calls reliably,
-which matters here because map authoring is multi-step.
+Pick a model with solid tool calling (a recent Qwen or Llama instruct model).
+Smaller models struggle to chain several calls reliably, which matters here —
+map authoring is inherently multi-step.
 
-## Available Tools (65)
+---
 
-### Actors
-`get_actors`, `get_actor`, `update_actor`, `create_actor`, `search_actors`
+## What it will *not* do
 
-XP actors use a `parameters` Table (6×100: MaxHP, MaxSP, STR, DEX, AGI, INT per
-level) instead of MZ traits. `create_actor` generates linear growth curves by
-default. Equipment slots are `weapon_id` and `armor1_id`–`armor4_id`
-(shield/helmet/body/accessory).
+Worth knowing before you install:
 
-### Items / Equipment
-`get_items`, `get_weapons`, `get_armors`, `get_skills`, `update_item`,
-`search_items`, `create_weapon`, `create_armor`
+- **XP only.** It does not read VX, VX Ace, MV or MZ projects. Their data
+  formats are different (`.rvdata`, `.rvdata2`, JSON).
+- **It does not generate art or audio.** It can import, classify and validate
+  graphics you already have; it cannot draw them.
+- **It does not write RGSS scripts for you** beyond storing what it is given —
+  it manages `Scripts.rxdata` as data, and correctness is on you and your model.
+- **It cannot run your game or test it.** `render_map` shows a static layout
+  preview, not gameplay.
+- **It does not know about Pokémon Essentials' own systems** (PBS files, its
+  plugin conventions, its data classes).
+
+---
+
+## Available tools (65)
+
+<details open>
+<summary><b>Actors</b></summary>
+
+`get_actors` · `get_actor` · `update_actor` · `create_actor` · `search_actors`
+
+XP actors use a `parameters` Table (6×100 — MaxHP, MaxSP, STR, DEX, AGI, INT
+per level) rather than MZ-style traits. `create_actor` generates linear growth
+curves by default. Equipment slots are `weapon_id` and `armor1_id`–`armor4_id`
+(shield / helmet / body / accessory).
+</details>
+
+<details>
+<summary><b>Items & equipment</b></summary>
+
+`get_items` · `get_weapons` · `get_armors` · `get_skills` · `update_item` ·
+`search_items` · `create_weapon` · `create_armor`
 
 `create_weapon`/`create_armor` append to `Weapons.rxdata`/`Armors.rxdata` with
 editor-default fields (override any). Armor `kind`: 0=shield, 1=helmet, 2=body,
 3=accessory.
+</details>
 
-### Skills
-`get_skill`, `create_skill`, `create_damage_skill`, `create_healing_skill`,
-`create_state_skill`, `update_skill`, `search_skills`
+<details>
+<summary><b>Skills</b></summary>
 
-XP has no damage formulas. Damage = `power` scaled by stat influence rates
-(`atk_f`/`str_f` for physical, `int_f` for magical) and reduced by the target's
-`pdef_f`/`mdef_f` rates. **Negative power = healing.** There is no
-`create_buff_skill` (XP has no buff system — use states instead).
+`get_skill` · `create_skill` · `create_damage_skill` · `create_healing_skill` ·
+`create_state_skill` · `update_skill` · `search_skills`
 
-Scope values: 0=none, 1=one enemy, 2=all enemies, 3=one ally, 4=all allies,
+XP has no damage formulas. Damage is `power` scaled by stat-influence rates
+(`atk_f`/`str_f` physical, `int_f` magical) and reduced by the target's
+`pdef_f`/`mdef_f`. **Negative power = healing.** There is no `create_buff_skill`
+— XP has no buff system, use states.
+
+Scope: 0=none, 1=one enemy, 2=all enemies, 3=one ally, 4=all allies,
 5=one ally (HP 0), 6=all allies (HP 0), 7=user.
+</details>
 
-### Maps / Events
-`get_map`, `get_map_infos`, `get_map_events`, `get_map_event`,
-`update_map_event`, `create_map_event`, `create_transfer_event`,
-`search_map_events`, `add_event_command`, `add_show_text`
+<details>
+<summary><b>Maps & events</b></summary>
 
-Maps live in `Data/MapXXX.rxdata`. `get_map` summarizes the tile-data Table
-unless `includeTiles: true`. Events are stored in a hash keyed by event ID.
+`get_map` · `get_map_infos` · `get_map_events` · `get_map_event` ·
+`update_map_event` · `create_map_event` · `create_transfer_event` ·
+`search_map_events` · `add_event_command` · `add_show_text`
+
+Maps live in `Data/MapXXX.rxdata`. `get_map` summarises the tile Table unless
+`includeTiles: true`. Events are a hash keyed by event ID.
+
 `add_show_text` handles XP's message structure (first line = code 101,
-continuations = 401, 4 lines per box). XP-specific notes: code 101 carries
-text directly (unlike VX+); choice text exists redundantly in both the 102
-array and the 402 branches and must stay in sync; move routes are 209/509.
+continuations = 401, 4 lines per box). XP specifics: code 101 carries text
+directly (unlike VX+); choice text is stored redundantly in both the 102 array
+and the 402 branches and must stay in sync; move routes are 209/509.
 
-`create_transfer_event` wires two maps together — it writes a Transfer Player
-(command 201) event and validates that both endpoints exist and are in bounds
-before saving. Use `validate_connectivity` afterward to check the whole world
-graph. The complete 110-code command table is in `research/event-commands.md`.
+`create_transfer_event` wires two maps together and validates both endpoints
+exist and are in bounds before writing. Run `validate_connectivity` afterwards.
+The full 110-code table is in [`research/event-commands.md`](research/event-commands.md).
+</details>
 
-### Map authoring (tile painting)
-`get_map_design_guide`, `get_map_size_advisory`, `create_map`, `get_map_tiles`,
-`set_map_tiles`, `fill_region`, `apply_autotile`, `scatter_tiles`
+<details>
+<summary><b>Map authoring (tile painting)</b></summary>
 
-`apply_autotile` paints an autotile and computes seamless edges; give it an
-organic **`blob`** (ponds/lakes/forest), a **`cells`** list (rivers/curved paths),
-or a **`region`** rect (rectangular floors only). `scatter_tiles` distributes
-clutter (flowers/bushes/rocks) at a target density with an optional focal
-gradient — so maps get organic shapes and whole-map detail instead of blocky
-ponds and corner-clustered tiles. See `MAP-DESIGN.md` §5b for the craft rules.
+`get_map_design_guide` · `get_map_size_advisory` · `create_map` ·
+`get_map_tiles` · `set_map_tiles` · `fill_region` · `apply_autotile` ·
+`scatter_tiles`
 
-`get_map_design_guide` returns the level-design guide (layer roles, priority,
-the multi-tile no-overlap rule, composition, workflow) — load it before authoring;
-`create_map` also returns its core rules inline. When editing an existing map,
-`get_map_size_advisory` reports its screen count, target focal-point and
-path-junction counts, recommended scatter density, and oversize or
-purpose-mismatch warnings, so size and tile budget guide the design.
-Layers (`Map.data` z, drawn
-z0→z1→z2 = editor Layer 1/2/3) are assigned by **role**: z0 terrain (autotiles),
-z1 ground clutter (priority 0), z2 overhead (priority > 0 — tree canopies/roofs
-the player walks behind).
+`apply_autotile` paints an autotile and computes seamless edge variants per
+cell from 8-neighbour connectivity — give it an organic **`blob`** (ponds,
+lakes, forest), a **`cells`** list (rivers, curved paths), or a **`region`**
+rect (rectangular floors only). `scatter_tiles` distributes clutter at a target
+density with an optional focal gradient. Together these avoid the blocky ponds
+and corner-clustered detail that make maps look programmer-generated. See
+[MAP-DESIGN.md](MAP-DESIGN.md) §5b.
 
-Create maps and paint their tile layers directly. `create_map` writes a blank
-`MapXXX.rxdata` (`Table[w,h,3]` of tile id 0) + a `MapInfos` entry with editor
-defaults. `fill_region` and `set_map_tiles` write tile ids into a layer
-(0=ground, 1=detail, 2=overhead); `get_map_tiles` reads them back as a 2D grid.
-Tile ids: 0 = empty, 48–383 = autotiles (`slot=id/48-1`, `variant=id%48`), ≥384
-= regular tiles (`col=(id-384)%8`, `row=(id-384)/8`). `apply_autotile` paints an
-autotile region and computes the correct **edge variant per cell** from
-8-neighbour connectivity (seamless coastlines/paths/cliffs, not blocky fills),
-recomputing the border ring so it blends. Pair with `render_map` to see results.
-Before composing with an unfamiliar tileset, generate and review its semantic
-catalog with the identification harness described below.
+Layers (`Map.data` z, drawn z0→z1→z2 = editor Layer 1/2/3) are assigned by
+**role**: z0 terrain (autotiles), z1 ground clutter (priority 0), z2 overhead
+(priority > 0 — canopies and roofs the player walks behind).
 
-### Validation
-`validate_assets`, `validate_connectivity`
+Tile ids: 0 = empty; 48–383 = autotiles (`slot=id/48-1`, `variant=id%48`);
+≥384 = regular tiles (`col=(id-384)%8`, `row=(id-384)/8`).
 
-`validate_assets` scans every data file for referenced graphic/audio filenames
-(tilesets, autotiles, panoramas, fogs, battlebacks, character/battler/icon
-graphics, animations, windowskin/title/gameover/transition, BGM/BGS/ME, and map
-event sprites) and reports any with no matching file on disk — broken references
-are otherwise silent until runtime. Checks the project's `Graphics/`+`Audio/`
-first, then the RTP; matches on base name regardless of extension.
+Load `get_map_design_guide` before authoring — `create_map` also returns its
+core rules inline. `get_map_size_advisory` reports screen count, target focal
+points, recommended scatter density and oversize warnings for an existing map.
+</details>
 
-`validate_connectivity` builds the world transfer graph from every map's Transfer
-Player events and reports problems that are otherwise hard to spot: maps that are
-unreachable from the start map, transfers that point at a missing map or an
+<details>
+<summary><b>Validation</b></summary>
+
+`validate_assets` · `validate_connectivity`
+
+`validate_assets` scans every data file for referenced graphic and audio
+filenames — tilesets, autotiles, panoramas, fogs, battlebacks, character,
+battler and icon graphics, animations, windowskin, title, gameover, transition,
+BGM/BGS/ME and map event sprites — and reports any with no file on disk. Broken
+references are otherwise silent until runtime. Checks the project's `Graphics/`
+and `Audio/` first, then the RTP, matching base name regardless of extension.
+
+`validate_connectivity` builds the world transfer graph and reports maps
+unreachable from the start map, transfers pointing at a missing map or an
 out-of-bounds tile, and dead ends.
+</details>
 
-### Tileset identification and map preview
-`create_tileset_identification_harness`, `get_tileset_catalog`,
-`save_tileset_catalog`, `validate_tileset_catalog`, `render_tileset_atlas`,
+<details>
+<summary><b>Tileset identification & preview</b></summary>
+
+`create_tileset_identification_harness` · `get_tileset_catalog` ·
+`save_tileset_catalog` · `validate_tileset_catalog` · `render_tileset_atlas` ·
 `render_map`
 
-`create_tileset_identification_harness` creates an evidence-first review bundle:
-the exact source sheet, a labeled full-sheet copy with burned-in tile IDs,
-isolated transparent tile images, source rows, autotile sources, engine metadata,
-a catalog template, and an interactive browser page.
-Reviewed labels, intended uses, object grids, layers, and confidence live in a
-separate catalog so passability or visual resemblance cannot silently become a
-semantic claim. See `TILESET-CATALOG.md`.
+**`create_tileset_identification_harness`** builds an evidence-first review
+bundle: the source sheet, a labelled copy with burned-in tile IDs, isolated
+transparent tile images, source rows, autotile sources, engine metadata, a
+catalog template and an interactive browser page. Reviewed labels, intended
+uses, object grids, layers and confidence live in a **separate catalog**, so
+passability or visual resemblance cannot silently become a semantic claim. See
+[TILESET-CATALOG.md](TILESET-CATALOG.md).
 
-`render_tileset_atlas` renders a tileset to a labeled PNG — the graphic scaled
-with a grid, **each tile's id burned in**, passability dots (red=blocked,
-orange=partial), and a legend strip of the 7 autotile slots. It is a quick
-numeric reference; use the identification harness to determine what a tile is
-and whether it belongs to a larger object.
+**`render_tileset_atlas`** renders a tileset to a labelled PNG — scaled with a
+grid, each tile's id burned in, passability dots (red = blocked, orange =
+partial) and a legend of the 7 autotile slots.
 
+**`render_map`** renders a map's tile layers to a flat top-down **PNG preview**
+outside the editor, so you can *see* what you built. Composites all three
+layers using the tileset graphic (ids ≥ 384) and its autotiles (ids 48–383, via
+a cross-verified 48-variant quadrant table). Options: `layers`, `scale`,
+`region`, `drawGrid`, `drawEvents`, `passability`. Writes to
+`Data/.mcp-preview/map<NNN>.png` and returns the path.
 
-Renders a map's tile layers to a flat top-down **PNG preview** outside the
-editor, so you can *see* a map you built or edited and self-check it. Composites
-all three tile layers using the tileset graphic (tile ids ≥ 384) and the
-tileset's autotiles (ids 48–383, via a cross-verified 48-variant quadrant
-table). Options: `layers`, `scale` (integer upscale), `region` (tile crop),
-`drawGrid`, `drawEvents` (page-0 sprite/tile + an event legend), `passability`
-(red = blocked, orange = partial). Reads the project's `Graphics/` first, then
-falls back to the RTP (set `RPGMAKER_RTP_PATH`; defaults to the Steam install).
-Writes to `Data/.mcp-preview/map<NNN>.png` by default and returns the path —
-open/Read it to view. Layout preview only: no priority/overhead draw-order,
-fog/panorama/weather, or autotile animation (frame 0 used). Full design notes:
-`SCOPING-map-renderer.md`.
+*Layout preview only* — no priority/overhead draw order, no fog, panorama or
+weather, and autotile animation uses frame 0. Design notes:
+[SCOPING-map-renderer.md](SCOPING-map-renderer.md).
+</details>
 
-### Asset import verification
-`classify_asset`, `verify_tileset`, `register_tileset`
+<details>
+<summary><b>Asset import verification</b></summary>
 
-Tools for bringing outside graphics into a project safely. Sorting a sheet by its
-canvas dimensions alone silently mis-imports assets authored for other engines, so
-these detect the true content tile size (edge-periodicity, where a candidate size
-must evenly divide the canvas, with a bias toward native 32px) and fingerprint the
-filename (`$`/`!` prefix = a single-object sprite that belongs in `Characters`,
-not a tileset; `A1`–`A5` = an MV/MZ autotile sheet only when the content is not
-32px, otherwise a battler variant). `verify_tileset` writes a grid-overlay preview
-so scale problems are visible before import. `register_tileset` adds a guarded
-`Tilesets.rxdata` entry (with passages/priorities/terrain Tables sized to the
-sheet) and declines non-native assets unless explicitly forced.
+`classify_asset` · `verify_tileset` · `register_tileset`
 
-### Database (Classes, States, Enemies, Troops, CommonEvents, Tilesets, ...)
-`get_database`, `get_database_entry`, `update_database_entry`
+Sorting a sheet by canvas dimensions alone silently mis-imports assets authored
+for other engines, so these detect the true **content** tile size
+(edge-periodicity, where a candidate must evenly divide the canvas, biased
+toward native 32px) and fingerprint the filename: a `$`/`!` prefix means a
+single-object sprite belonging in `Characters`, not a tileset; `A1`–`A5` means
+an MV/MZ autotile sheet *only* when content is not 32px, otherwise it is a
+battler variant.
 
-Generic access to every database file, including the ones without dedicated
-tools. Tileset passability lives in the `passages` Table (0 = passable,
-1/2/4/8 = down/left/right/up blocked, 15 = impassable, +64 bush, +128 counter).
+`verify_tileset` writes a grid-overlay preview so scale problems are visible
+before import. `register_tileset` adds a guarded `Tilesets.rxdata` entry with
+passages/priorities/terrain Tables sized to the sheet, and declines non-native
+assets unless explicitly forced.
+</details>
 
-### Scripts (Scripts.rxdata)
-`get_scripts`, `get_script`, `update_script`, `create_script`, `search_scripts`
+<details>
+<summary><b>Database, scripts & system</b></summary>
+
+**Database** — `get_database` · `get_database_entry` · `update_database_entry`
+
+Generic access to every database file, including those without dedicated tools
+(Classes, States, Enemies, Troops, CommonEvents, Tilesets…). Tileset passability
+lives in the `passages` Table: 0 = passable; 1/2/4/8 = down/left/right/up
+blocked; 15 = impassable; +64 bush; +128 counter.
+
+**Scripts** — `get_scripts` · `get_script` · `update_script` · `create_script` ·
+`search_scripts`
 
 Full RGSS script access with zlib handling. Sources are stored as
-`[magic, name, zlib-deflated code]` triples; per-script magic numbers are
-not meaningful to the editor. `create_script` inserts above `Main` by
-convention. Binary-safe: script data never passes through UTF-8 string
-conversion.
+`[magic, name, zlib-deflated code]` triples; per-script magic numbers are not
+meaningful to the editor. `create_script` inserts above `Main` by convention.
+Binary-safe — script data never passes through UTF-8 conversion.
 
-### System
-`get_system`, `get_variables`, `set_variable_name`, `get_switches`,
-`set_switch_name`, `get_game_title`, `update_game_title`,
+**System** — `get_system` · `get_variables` · `set_variable_name` ·
+`get_switches` · `set_switch_name` · `get_game_title` · `update_game_title` ·
 `update_starting_position`
+</details>
+
+---
+
+## How it works
+
+<details>
+<summary><b>The Marshal layer</b></summary>
+
+`.rxdata` files are parsed with a vendored, bug-fixed copy of
+[@hyrious/marshal](https://github.com/hyrious/marshal) (`src/vendor/marshal/`)
+and converted to plain JSON. Ruby objects become
+`{ "_class": "RPG::Actor", ... }` with instance variables as fields (no leading
+`@`).
+
+**Why vendored:** upstream ≤0.3.3 mis-decodes negative multibyte Marshal
+integers — −150 decodes as +106. In XP, healing is negative power, so that bug
+silently converted every healing skill into a damage skill on save. Details in
+[`research/REPORT.md`](research/REPORT.md).
+
+The RGSS binary classes `Table` (tile and parameter grids), `Color` and `Tone`
+have dedicated codecs. On save, strings are written as **raw byte strings** with
+no Ruby 1.9 encoding ivars, or XP's Ruby 1.8 / RGSS104E refuses to load them.
+The game title lives in `Game.ini`, not in System data — unlike MZ.
+
+Round-trips of all 15 template `.rxdata` files from the RMXP install are
+byte-identical.
+</details>
+
+<details>
+<summary><b>Behaviour that protects your project</b></summary>
+
+- **Automatic backups** — before the first write to any file in a session, the
+  original is copied to `Data/.mcp-backup/<name>.bak` (project root for
+  `Game.ini`). See the warning at the top: one per file per session.
+- **Save-revision marker** — map and event writes regenerate
+  `System.magic_number`, mirroring the editor, so existing save files reload the
+  changed map instead of keeping a stale copy.
+- **Event list invariants** — command lists are normalised on save: every
+  command gets code/indent/parameters, and the trailing
+  `{code: 0, indent: 0, parameters: []}` terminator is guaranteed.
+- **Verified engine math** — skill tools document XP's real damage algorithm,
+  extracted from `Game_Battler 3`, and the helpers are calibrated to
+  default-database conventions (heals are negative power with `int_f` 50).
+</details>
+
+<details>
+<summary><b>How conventions reach any client</b></summary>
+
+The server surfaces its own guidance, so **any** MCP client gets the
+conventions — not just one that can read this repository:
+
+- **Server instructions** are sent on connect (governance + map-design rules)
+  and injected into context by most clients.
+- The guides are exposed as **MCP resources** (`rpgmaker-xp://docs/…`):
+  `map-design`, `tileset-catalog`, `authoring`, `wisdom`.
+- `get_map_design_guide` returns the full guide; `create_map` returns its core
+  rules inline.
+</details>
+
+---
 
 ## Testing
 
 ```bash
 npm run build
-node test/roundtrip.mjs     # marshal round-trip against real RMXP template data
-node test/tools.mjs         # end-to-end tool tests on a scratch project
-node test/server-smoke.mjs  # MCP stdio handshake + tool calls
-node test/render.mjs        # map renderer: autotile table + PNG renders
+node test/roundtrip.mjs        # Marshal round-trip against real RMXP data
+node test/tools.mjs            # end-to-end tool tests on a scratch project
+node test/server-smoke.mjs     # MCP stdio handshake + tool calls
+node test/render.mjs           # renderer: autotile table + PNG renders
+node test/tileset-catalog.mjs  # catalog validation
+node test/authoring.mjs        # map authoring primitives
+node test/connectivity.mjs     # transfer-graph validation
+node test/validate.mjs         # asset reference checking
+node test/extract-scripts.mjs  # Scripts.rxdata extraction
 ```
 
-Render tests need local RMXP graphics (the Steam RTP install and the
-`library/Valentine90-ABS` fixture); they SKIP rather than fail when those assets
-are absent. The autotile-table integrity check always runs.
-
 The round-trip test loads every `.rxdata` file from the RMXP install's
-new-project template, converts to JSON and back, and verifies semantic
-equality (output is byte-size identical to the originals).
+new-project template, converts to JSON and back, and verifies byte-identical
+output. Render tests need local RMXP graphics (the Steam RTP install and the
+`library/Valentine90-ABS` fixture) and **skip** rather than fail when those are
+absent; the autotile-table integrity check always runs.
 
-## Safety and Best Practices
+---
 
-1. **Backup your project** before making changes (the whole `Data/` folder)
-2. **Close the RPG Maker XP editor** while using this server — the editor
-   rewrites all data files on save and will clobber external changes
-3. The server backs up each file to `Data/.mcp-backup/` before its first write
-   per session, and bumps `System.magic_number` so existing saves reload edited
-   maps
-4. Test your game after changes
+## Documentation
 
-## How the conventions reach any client
+| Document | What it covers |
+|---|---|
+| **[SETUP.md](SETUP.md)** | Install and configuration walkthrough, troubleshooting |
+| **[EXAMPLES.md](EXAMPLES.md)** | Worked examples — what to ask for, and the tool calls it produces |
+| **[AUTHORING-XP.md](AUTHORING-XP.md)** | Writing for XP, and how this server acts as a governance layer to keep a project canonical as humans and models both edit it |
+| **[MAP-DESIGN.md](MAP-DESIGN.md)** | Level design: the three-layer model, priority and passability, multi-tile object rules, composition |
+| **[TILESET-CATALOG.md](TILESET-CATALOG.md)** | Evidence-first tile identification, object grouping, confidence rules |
+| **[CONTENT-SOURCES.md](CONTENT-SOURCES.md)** | Licence-vetted catalogue of RGSS1 script libraries you can install with `create_script` |
+| **[WISDOM.md](WISDOM.md)** | Collected engineering notes: Marshal layer, battle math, event system, coexisting with the editor |
+| **[research/](research/)** | Event command table, RGSS class definitions, the decoder bug report, engineering surveys |
+| **SCOPING-\*.md / SPEC-\*.md** | Design notes for the renderer, map authoring, graphics generation, resource import |
 
-The server surfaces its own guidance so **any** MCP client (not just one that can
-read this repo) gets the conventions:
-- **Server instructions** are sent on connect (governance + map-design rules) and
-  injected into context by most clients.
-- The docs below are also exposed as **MCP resources** (`rpgmaker-xp://docs/…`):
-  `map-design`, `tileset-catalog`, `authoring`, `wisdom` — readable on demand.
-- `get_map_design_guide` returns the full map-design doc, and `create_map` returns
-  its core rules inline.
-
-## Further reading
-
-- **[AUTHORING-XP.md](AUTHORING-XP.md)** — Writing for RPG Maker XP: the
-  particularities of XP authoring and how this MCP acts as a **governance layer**
-  to keep a project canonical and drift-free as humans and LLMs edit it.
-- **[MAP-DESIGN.md](MAP-DESIGN.md)** — level/map design guide: the three-layer
-  model (terrain / clutter / overhead), tile priority & passability, multi-tile
-  object rules, and composition principles. Loaded in context via
-  `get_map_design_guide`.
-- **[TILESET-CATALOG.md](TILESET-CATALOG.md)** - evidence-first tile
-  identification, multi-tile object grouping, confidence rules, and catalog
-  validation before automatic map composition.
-- **[WISDOM.md](WISDOM.md)** — collected engineering wisdom (Marshal layer, battle
-  math, event system, coexisting with the editor).
-- **SCOPING-*.md** — design notes for the renderer, map authoring, and graphics
-  generation features.
+---
 
 ## Credits
 
 Forked from **[k4zuki0539/-rpgmaker-mz-mcp](https://github.com/k4zuki0539/-rpgmaker-mz-mcp)**
-(RPG Maker MZ MCP Server, MIT), then re-authored for RPG Maker XP: the MZ
-version targeted MZ's JSON data; this fork reads and writes XP's Ruby 1.8
-Marshal `.rxdata` directly, adds skills/scripts/database/render tooling, a
-byte-verified Marshal codec, and map rendering. Upstream authorship and the MIT
-license are preserved — see [`LICENSE`](LICENSE).
+(RPG Maker MZ MCP Server, MIT), then re-authored for RPG Maker XP. The MZ
+version targets MZ's JSON data; this fork reads and writes XP's Ruby 1.8
+Marshal `.rxdata` directly, and adds skills, scripts, database and render
+tooling, a byte-verified Marshal codec, map authoring and map rendering.
+Upstream authorship and the MIT licence are preserved — see [`LICENSE`](LICENSE).
 
 Maintained by **[SerifeusStudios](https://github.com/SerifeusStudio)**.
-Third-party components and their licenses are listed in
+Third-party components and their licences are listed in
 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
+
+RPG Maker XP is a product of Enterbrain / Gotcha Gotcha Games. This project is
+unaffiliated, and bundles no engine assets.
 
 ## License
 

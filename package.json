@@ -9,11 +9,16 @@
   },
   "files": [
     "dist",
+    "SETUP.md",
+    "EXAMPLES.md",
     "MAP-DESIGN.md",
     "TILESET-CATALOG.md",
     "AUTHORING-XP.md",
+    "CONTENT-SOURCES.md",
     "WISDOM.md",
-    "THIRD-PARTY-NOTICES.md"
+    "SCOPING-map-renderer.md",
+    "THIRD-PARTY-NOTICES.md",
+    "research/*.md"
   ],
   "scripts": {
     "build": "tsc",

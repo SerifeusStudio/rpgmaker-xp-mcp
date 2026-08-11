@@ -1,511 +1,408 @@
-# RPG Maker XP MCP Server — Usage Examples
+# Worked examples
 
-This document provides detailed examples of how to use the RPG Maker XP MCP
-Server with Claude. Examples are phrased as natural-language requests; Claude
-picks the matching tool.
+You do not call these tools by hand. You describe what you want in plain
+language, and the model picks the tool and fills in the arguments. The JSON
+below is shown so you can see what it produced — and so you can correct it when
+it gets something wrong.
 
-## Table of Contents
+Every argument in this document is taken from the server's actual tool schemas.
+If a call here fails, that is a bug worth [reporting](https://github.com/SerifeusStudio/rpgmaker-xp-mcp/issues).
 
-1. [Actor Management](#actor-management)
-2. [Item and Equipment Management](#item-and-equipment-management)
-3. [Map and Event Management](#map-and-event-management)
-4. [Map Rendering](#map-rendering)
-5. [System Configuration](#system-configuration)
-6. [Advanced Use Cases](#advanced-use-cases)
+> **Before your first write:** close the RPG Maker XP editor and back up
+> `Data/`. See the warnings at the top of [README.md](README.md).
 
-## Actor Management
+**Contents** · [First session](#first-session) · [Actors](#actors) ·
+[Skills](#skills) · [Items](#items-and-equipment) · [Events](#events-and-dialogue) ·
+[Connecting maps](#connecting-maps) · [Building a map](#building-a-map-from-scratch) ·
+[Seeing your work](#seeing-what-you-built) · [Validation](#validation-before-you-ship) ·
+[XP is not MZ](#xp-is-not-mz) · [Troubleshooting](#troubleshooting)
 
-### Example 1: List All Actors
+---
 
-**User**: "Show me all the actors in my RPG Maker XP project"
+## First session
 
-Claude will use the `get_actors` tool and display all actors with their IDs, names, and key properties.
+Start with something read-only, to confirm the server is connected and pointed
+at the right project:
 
-### Example 2: Get Specific Actor Details
+> *"List the actors in my project."*
 
-**User**: "Show me the details of actor 1"
+You should get names and IDs back. If you get an error, see
+[Troubleshooting](#troubleshooting).
 
-Claude will use the `get_actor` tool with actorId 1 and display complete information including:
-- Name and nickname
-- Class ID
-- Initial and max level
-- Character and face graphics
-- Traits and equipment
+Then get your bearings:
 
-### Example 3: Update an Existing Actor
+> *"How many maps does this project have, and what are they called?"*
+> — `get_map_infos`
+>
+> *"Show me the game title and where the player starts."*
+> — `get_game_title`, `get_system`
 
-**User**: "Change actor 2's name to 'Warrior' and set their initial level to 10"
+---
 
-Claude will use the `update_actor` tool:
+## Actors
+
+### Look one up
+
+> *"Show me actor 1."*
+
+`get_actor` returns the full RPG::Actor: name, class, level range, the EXP
+curve, graphics, starting equipment, and the `parameters` Table.
+
+### Create one
+
+> *"Create an actor called Rowan, class 1, starting at level 5, using the
+> Fighter01 character graphic."*
+
+```json
+{
+  "name": "Rowan",
+  "class_id": 1,
+  "initial_level": 5,
+  "final_level": 99,
+  "character_name": "001-Fighter01",
+  "battler_name": "001-Fighter01"
+}
+```
+
+Only `name` is required — everything else takes an RMXP editor default, and the
+six stat growth curves are generated linearly unless you supply a `parameters`
+Table.
+
+Equipment slots use XP's names: `weapon_id`, and `armor1_id` through
+`armor4_id` for shield, helmet, body and accessory.
+
+### Change one
+
+> *"Give actor 2 a starting shield — armor 3 — and rename them to Vale."*
 
 ```json
 {
   "actorId": 2,
-  "updates": {
-    "name": "Warrior",
-    "initialLevel": 10
-  }
+  "updates": { "name": "Vale", "armor1_id": 3 }
 }
 ```
 
-### Example 4: Create a New Actor
+`updates` takes raw XP field names: `name`, `class_id`, `initial_level`,
+`final_level`, `exp_basis`, `exp_inflation`, `character_name`, `character_hue`,
+`battler_name`, `battler_hue`, `weapon_id`, `armor1_id`–`armor4_id`, the
+matching `_fix` flags, and `parameters`.
 
-**User**: "Create a new actor named 'Mage' with class 2, starting at level 5"
+### Find one
 
-Claude will use the `create_actor` tool with appropriate default values:
+> *"Which actors have 'knight' in the name?"* — `search_actors`
+
+---
+
+## Skills
+
+XP has **no damage formulas**. A skill has a `power` number, and the engine
+scales it by stat-influence rates. The helpers below wrap that so you can think
+in intent rather than in `int_f`.
+
+### A damage skill
+
+> *"Make a fire spell called Ember — 140 power, 75 SP, one enemy."*
 
 ```json
 {
-  "name": "Mage",
-  "nickname": "",
-  "profile": "",
-  "classId": 2,
-  "initialLevel": 5,
-  "maxLevel": 99,
-  "characterName": "",
-  "characterIndex": 0,
-  "faceName": "",
-  "faceIndex": 0,
-  "battlerName": "",
-  "traits": [],
-  "equips": [0, 0, 0, 0, 0],
-  "note": ""
+  "name": "Ember",
+  "power": 140,
+  "spCost": 75,
+  "scope": 1,
+  "elementId": 1,
+  "physical": false
 }
 ```
 
-### Example 5: Search Actors
+`physical: false` (the default) means the damage scales off INT and is reduced
+by the target's MDEF; `true` uses ATK against PDEF. For calibration, the
+default database's Fire is power 140 at 75 SP.
 
-**User**: "Find all actors whose names contain 'knight'"
+### A healing skill
 
-Claude will use the `search_actors` tool to find matching actors.
-
-## Item and Equipment Management
-
-### Example 1: List All Items
-
-**User**: "Show me all the items in the game"
-
-Claude will use the `get_items` tool to retrieve and display all items.
-
-### Example 2: List Weapons and Armors
-
-**User**: "Show me all weapons and armors"
-
-Claude will use both `get_weapons` and `get_armors` tools in parallel.
-
-### Example 3: Update Item Properties
-
-**User**: "Change the 'Health Potion' (item 1) price to 100 gold"
-
-Claude will use the `update_item` tool:
+> *"A heal that restores about 150, costs 80 SP, targets one ally."*
 
 ```json
 {
-  "itemId": 1,
-  "updates": {
-    "price": 100
-  }
+  "name": "Mend",
+  "power": 150,
+  "spCost": 80,
+  "scope": 3
 }
 ```
 
-### Example 4: Update Item Description and Effects
+Pass `power` as a **positive** number — the tool writes XP's negative-power
+convention for you. Healing scales with the caster's INT, so the number is a
+baseline, not a fixed amount. Default-database Heal is power 150 at 80 SP.
 
-**User**: "Update item 5 to restore 100 HP instead of 50"
+### A status skill
 
-Claude will help you modify the item's effects array appropriately.
+> *"A poison dart — 80% hit chance, 20 SP, one enemy."*
 
-### Example 5: Search Items
+```json
+{
+  "name": "Poison Dart",
+  "stateId": 3,
+  "hit": 80,
+  "spCost": 20,
+  "scope": 1
+}
+```
 
-**User**: "Find all items related to healing"
+XP default states: 3 poison, 5 blind, 6 silence, 7 confuse, 8 sleep,
+9 paralyze. Confirm against your own `States.rxdata` — most projects change them.
 
-Claude will use the `search_items` tool with "heal" as the search term.
+**Scope values**, used by all skill tools: 0 none, 1 one enemy, 2 all enemies,
+3 one ally, 4 all allies, 5 one ally (HP 0), 6 all allies (HP 0), 7 user.
 
-## Map and Event Management
+---
 
-### Example 1: Get Map Information
+## Items and equipment
 
-**User**: "Show me the details of map 1"
+> *"Change the Potion's price to 100 gold."* — `update_item`
+>
+> *"Create an iron shield, armor kind 0."* — `create_armor`
+> Armor `kind`: 0 shield, 1 helmet, 2 body, 3 accessory.
+>
+> *"Raise the price of everything with 'Potion' in the name by half."*
+> — `search_items`, then `update_item` per result.
 
-Claude will use the `get_map` tool to retrieve complete map data including dimensions, tileset, and display name.
+---
 
-### Example 2: List All Events on a Map
+## Events and dialogue
 
-**User**: "Show me all events on map 3"
+### Dialogue is the common case
 
-Claude will use the `get_map_events` tool to list all events with their positions and names.
-
-### Example 3: Get Specific Event Details
-
-**User**: "Show me event 5 on map 2"
-
-Claude will use the `get_map_event` tool to retrieve detailed information about the event including all pages and commands.
-
-### Example 4: Update Event Position
-
-**User**: "Move event 3 on map 1 to position (10, 15)"
-
-Claude will use the `update_map_event` tool:
+> *"Add dialogue to event 4 on map 1: 'The bridge washed out last spring.
+> You'll want the ferry.'"*
 
 ```json
 {
   "mapId": 1,
-  "eventId": 3,
-  "updates": {
-    "x": 10,
-    "y": 15
-  }
-}
-```
-
-### Example 5: Create a Simple Event
-
-**User**: "Create a treasure chest event at position (5, 5) on map 1"
-
-Claude will use the `create_map_event` tool with a basic event structure:
-
-```json
-{
-  "mapId": 1,
-  "name": "Treasure Chest",
-  "x": 5,
-  "y": 5,
-  "note": "",
-  "pages": [
-    {
-      "conditions": {
-        "actorId": 1,
-        "actorValid": false,
-        "itemId": 1,
-        "itemValid": false,
-        "selfSwitchCh": "A",
-        "selfSwitchValid": false,
-        "switch1Id": 1,
-        "switch1Valid": false,
-        "switch2Id": 1,
-        "switch2Valid": false,
-        "variableId": 1,
-        "variableValid": false,
-        "variableValue": 0
-      },
-      "directionFix": false,
-      "image": {
-        "characterIndex": 0,
-        "characterName": "!Chest",
-        "direction": 2,
-        "pattern": 0,
-        "tileId": 0
-      },
-      "list": [
-        {
-          "code": 101,
-          "indent": 0,
-          "parameters": ["", 0, 0, 2]
-        },
-        {
-          "code": 401,
-          "indent": 0,
-          "parameters": ["You found a treasure!"]
-        },
-        {
-          "code": 0,
-          "indent": 0,
-          "parameters": []
-        }
-      ],
-      "moveFrequency": 3,
-      "moveRoute": {
-        "list": [{"code": 0, "parameters": []}],
-        "repeat": true,
-        "skippable": false,
-        "wait": false
-      },
-      "moveSpeed": 3,
-      "moveType": 0,
-      "priorityType": 0,
-      "stepAnime": false,
-      "through": false,
-      "trigger": 0,
-      "walkAnime": true
-    }
-  ]
-}
-```
-
-### Example 6: Add a Command to an Event
-
-**User**: "Add a 'Show Text' command to event 1 on map 1, page 0"
-
-Claude will use the `add_event_command` tool:
-
-```json
-{
-  "mapId": 1,
-  "eventId": 1,
+  "eventId": 4,
   "pageIndex": 0,
-  "command": {
-    "code": 101,
-    "indent": 0,
-    "parameters": ["", 0, 0, 2]
-  }
+  "text": "The bridge washed out last spring.\nYou'll want the ferry."
 }
 ```
 
-### Example 7: Search Events by Name
+Use `add_show_text` rather than assembling commands yourself. XP splits a
+message into a code 101 for the first line of each box and 401 for each
+continuation, four lines per box — this tool handles the split, the box
+boundaries and the terminator.
 
-**User**: "Find all NPC events on map 2"
+### A new event
 
-Claude will use the `search_map_events` tool with "NPC" as the search term.
+> *"Put a signpost at (12, 8) on map 1."*
 
-## Map Rendering
-
-### Example 1: Preview a map
-
-**User**: "Render map 1 so I can see it"
-
-Claude will use the `render_map` tool, which composites all three tile layers
-(using the tileset graphic and autotiles) to a PNG at `Data/.mcp-preview/map001.png`
-and returns the path. Claude can then open the image to check the result.
-
-### Example 2: Debug overlays
-
-**User**: "Render map 2 with the events and passability shown, at 2x scale"
-
-```
-render_map(mapId: 2, drawEvents: true, passability: true, scale: 2)
+```json
+{ "mapId": 1, "name": "Signpost", "x": 12, "y": 8 }
 ```
 
-Draws each event's sprite/marker (and returns an event legend), tints blocked
-cells red and partially-blocked cells orange, and upscales 2× for legibility.
+Omit `pages` and you get one empty page to build on — usually you then call
+`add_show_text` against `pageIndex: 0`.
 
-### Example 3: Crop a region
+### Finding events
 
-**User**: "Show me just the top-left 10x10 tiles of map 1 with a grid"
+> *"Which events on map 3 mention the ferry?"* — `search_map_events`
 
+```json
+{ "mapId": 3, "searchTerm": "ferry" }
 ```
-render_map(mapId: 1, region: { x: 0, y: 0, w: 10, h: 10 }, drawGrid: true)
-```
 
-> Rendering reads the project's `Graphics/` first, then the RTP (set
-> `RPGMAKER_RTP_PATH`). Missing graphics are reported in the result's `notes`,
-> never fatal.
+### Raw commands
 
-## System Configuration
+`add_event_command` takes a raw `{code, indent, parameters}` when no helper
+exists. The **canonical XP command table is
+[`research/event-commands.md`](research/event-commands.md)** — 110 codes,
+extracted from the default Interpreter scripts. Use it rather than a table you
+remember from MV or MZ; see [XP is not MZ](#xp-is-not-mz).
 
-### Example 1: Get Game Variables
+---
 
-**User**: "Show me all the game variables"
+## Connecting maps
 
-Claude will use the `get_variables` tool to list all variable names.
-
-### Example 2: Set Variable Name
-
-**User**: "Set variable 1 to 'Player Gold'"
-
-Claude will use the `set_variable_name` tool:
+> *"Put a door at (10, 2) on map 1 that leads to map 2 at (10, 13), facing down."*
 
 ```json
 {
-  "variableId": 1,
-  "name": "Player Gold"
+  "mapId": 1,
+  "x": 10, "y": 2,
+  "targetMapId": 2,
+  "targetX": 10, "targetY": 13,
+  "direction": 2,
+  "trigger": 0,
+  "graphic": { "characterName": "!Door1", "direction": 2 }
 }
 ```
 
-### Example 3: Get Game Switches
+`trigger: 0` is action-button — a door you press against, so give it a graphic.
+`trigger: 1` is player-touch, for an invisible edge teleport; omit `graphic`
+there. Both endpoints are validated as existing and in-bounds before anything
+is written.
 
-**User**: "Show me all game switches"
+---
 
-Claude will use the `get_switches` tool.
+## Building a map from scratch
 
-### Example 4: Set Switch Name
+This is the workflow the server is really built around.
 
-**User**: "Name switch 10 'Quest Complete'"
+**1. Read the design rules first.**
 
-Claude will use the `set_switch_name` tool:
+> *"Load the map design guide."* — `get_map_design_guide`
+
+**2. Create the map.** Size follows purpose:
+
+```json
+{ "name": "Willow Marsh", "purpose": "region", "tilesetId": 1 }
+```
+
+Omit `width`/`height` and the purpose picks them — `interior` 20×15,
+`town` ~40×35, `dungeon` ~45×40, `overworld` ~100×90.
+
+**3. Lay the ground.** `fill_region` with no `rect` fills the whole layer:
+
+```json
+{ "mapId": 12, "layer": 0, "tileId": 48 }
+```
+
+Layers by role: **0** ground/terrain, **1** detail and clutter, **2** overhead
+(canopies and roofs the player walks *behind*).
+
+**4. Shape the terrain.** This is where maps stop looking programmer-made.
+For anything natural, use `blob` — never `region`:
 
 ```json
 {
-  "switchId": 10,
-  "name": "Quest Complete"
+  "mapId": 12,
+  "layer": 0,
+  "autotileSlot": 1,
+  "blob": { "cx": 30, "cy": 20, "rx": 9, "ry": 6, "irregularity": 0.5 }
 }
 ```
 
-### Example 5: Update Game Title
-
-**User**: "Change the game title to 'Legend of the Crystal'"
-
-Claude will use the `update_game_title` tool:
+For a river or a trail, use `path` with waypoints — it stays orthogonal, which
+autotiles require:
 
 ```json
 {
-  "title": "Legend of the Crystal"
+  "mapId": 12,
+  "layer": 0,
+  "autotileSlot": 3,
+  "path": { "points": [[4, 30], [18, 26], [30, 27], [46, 22]], "width": 2 }
 }
 ```
 
-### Example 6: Update Starting Position
+`region` exists, but it is for genuinely rectangular things — a stone floor, a
+plaza. A rectangular pond is the classic tell of a generated map.
 
-**User**: "Set the starting position to map 5 at coordinates (10, 8)"
+**5. Scatter detail.** `scatter_tiles` spreads clutter at a target density
+across the whole map, with an optional focal gradient — rather than clumping it
+in one corner.
 
-Claude will use the `update_starting_position` tool:
+**6. Look at it.** See below.
+
+---
+
+## Seeing what you built
+
+> *"Render map 12 at 2× so I can see it."*
 
 ```json
-{
-  "mapId": 5,
-  "x": 10,
-  "y": 8
-}
+{ "mapId": 12, "scale": 2 }
 ```
 
-## Advanced Use Cases
+Writes `Data/.mcp-preview/map012.png` and returns the path — the model can then
+open the image and check its own work, which is the point.
 
-### Use Case 1: Batch Update Actors
+**Debug overlays:**
 
-**User**: "Set all actors to start at level 10"
+```json
+{ "mapId": 12, "drawEvents": true, "passability": true, "scale": 2 }
+```
 
-Claude will:
-1. Use `get_actors` to retrieve all actors
-2. Use `update_actor` for each actor to set initialLevel to 10
+`passability` tints blocked cells red and partially-blocked cells orange.
+`drawEvents` draws each event's page-0 sprite and returns a legend.
 
-### Use Case 2: Create a Complete NPC Event
+**A crop, with the grid on:**
 
-**User**: "Create an NPC on map 1 at (12, 8) that gives the player 100 gold when talked to"
+```json
+{ "mapId": 12, "region": { "x": 0, "y": 0, "w": 12, "h": 12 }, "drawGrid": true }
+```
 
-Claude will create an event with appropriate commands:
-- Show Text: "Here's some gold!"
-- Change Gold: +100
-- Show Text: "Good luck on your journey!"
+This is a **layout preview, not a screenshot**: no overhead draw order, no fog,
+panorama or weather, and autotile animation uses frame 0. Missing graphics are
+reported in the result's `notes` and are never fatal.
 
-### Use Case 3: Organize Variables and Switches
+---
 
-**User**: "Organize my variables - set variables 1-10 for player stats (HP, MP, etc.) and variables 11-20 for quest flags"
+## Validation before you ship
 
-Claude will use `set_variable_name` multiple times to name each variable appropriately.
+Two checks that catch things play-testing misses for hours:
 
-### Use Case 4: Update All Potion Prices
+> *"Check every asset reference in the project."* — `validate_assets`
 
-**User**: "Increase the price of all items with 'Potion' in their name by 50%"
+Scans all data for referenced graphic and audio filenames and reports any with
+no file on disk. A missing character graphic is silent until the moment that
+event appears.
 
-Claude will:
-1. Use `search_items` with "Potion"
-2. For each result, use `update_item` to increase the price
+> *"Is every map reachable?"* — `validate_connectivity`
 
-### Use Case 5: Create Event Template
+Builds the transfer graph and reports maps unreachable from the start map,
+transfers pointing at a missing map or an out-of-bounds tile, and dead ends.
 
-**User**: "Create a template for save point events that I can reuse"
+---
 
-Claude will provide a complete event structure with:
-- Appropriate graphic (e.g., crystal or save point sprite)
-- Event commands for saving
-- Self-switch to prevent repeated triggers if needed
+## XP is not MZ
 
-### Use Case 6: Analyze Map Layout
+Most RPG Maker material online is written for MV or MZ. If you or your model
+carry those habits over, these are the ones that produce broken data:
 
-**User**: "Tell me how many events are on each map"
+| MV / MZ | RPG Maker XP |
+|---|---|
+| `MP` | **`SP`** — including command `312 = Change SP` |
+| Actors have `traits`, `equips`, `nickname`, `profile`, `faceName` | None of these exist. XP uses a `parameters` Table, `weapon_id`, `armor1_id`–`armor4_id` |
+| `maxLevel` | `final_level` |
+| camelCase fields (`classId`, `initialLevel`) | snake_case (`class_id`, `initial_level`) |
+| Damage formula strings | No formulas — `power` plus stat-influence rates; **negative power = healing** |
+| Buff system | None. Use states |
+| Plugin Command (`356`) | **Does not exist.** The command list ends at `355 = Script` |
+| Vehicles (`202 = Set Vehicle Location`) | No vehicles. `202 = Set Event Location` |
+| `205 = Set Movement Route` | `209 = Set Move Route`; `205` is Change Fog Color Tone |
+| `104 = Select Item` | `104 = Change Text Options` |
+| `249 = Play SE` | `249 = Play ME`; `250 = Play SE` |
+| Game title in System data | Game title lives in `Game.ini` |
+| Data as JSON | Data as Ruby 1.8 Marshal `.rxdata` |
 
-Claude will:
-1. Use `get_map_infos` to get all maps
-2. For each map, use `get_map_events` and count non-null events
+When in doubt, check [`research/event-commands.md`](research/event-commands.md)
+— it was extracted from XP's own Interpreter scripts, not transcribed from
+another engine.
 
-### Use Case 7: Clone an Event
+---
 
-**User**: "Copy event 3 from map 1 to position (20, 10) on the same map"
+## Troubleshooting
 
-Claude will:
-1. Use `get_map_event` to retrieve event 3
-2. Use `create_map_event` with the same properties but new position
+**"Invalid project path" / no tools appear**
+`RPGMAKER_PROJECT_PATH` must point at the folder containing `Game.rxproj` and
+`Data/`, not at `Data/` itself and not at the `.rxproj` file. Restart the client
+after changing it.
 
-### Use Case 8: Update Event Dialogues
+**File permission errors on write**
+The RPG Maker XP editor is open. Close it.
 
-**User**: "Change all dialogue in event 5 on map 2 to be more formal"
+**Changes vanished**
+The editor was open and re-saved over them. Recover from
+`Data/.mcp-backup/` — remembering that it holds only the state before the
+current session's first write.
 
-Claude will:
-1. Use `get_map_event` to retrieve the event
-2. Analyze the event commands for Show Text (code 101)
-3. Suggest updated dialogue
-4. Use `update_map_event` to apply changes
+**Map renders but tiles are missing or wrong**
+The tileset graphic was not found. Check the result's `notes`, and set
+`RPGMAKER_RTP_PATH` if your RTP is not at the Steam default.
 
-## Event Command Reference
+**A healing skill deals damage**
+That was the upstream Marshal decoder bug this project vendors a fix for. If
+you see it, you are running a build without the fix — see
+[`research/REPORT.md`](research/REPORT.md).
 
-Here are common event command codes you might use:
-
-### Message Commands
-- `101` - Show Text
-- `102` - Show Choices
-- `103` - Input Number
-- `104` - Select Item
-
-### Flow Control
-- `111` - Conditional Branch
-- `112` - Loop
-- `113` - Break Loop
-- `115` - Exit Event Processing
-- `117` - Common Event
-
-### Party Commands
-- `121` - Control Switches
-- `122` - Control Variables
-- `123` - Control Self Switch
-- `124` - Control Timer
-- `125` - Change Gold
-- `126` - Change Items
-- `127` - Change Weapons
-- `128` - Change Armor
-
-### Actor Commands
-- `129` - Change Party Member
-- `311` - Change HP
-- `312` - Change MP
-- `313` - Change State
-- `314` - Recover All
-- `315` - Change EXP
-- `316` - Change Level
-
-### Movement Commands
-- `201` - Transfer Player
-- `202` - Set Vehicle Location
-- `203` - Set Event Location
-- `204` - Scroll Map
-- `205` - Set Movement Route
-
-### Screen Commands
-- `221` - Fadeout Screen
-- `222` - Fadein Screen
-- `223` - Tint Screen
-- `224` - Flash Screen
-- `225` - Shake Screen
-
-### Audio Commands
-- `241` - Play BGM
-- `242` - Fadeout BGM
-- `249` - Play SE
-
-### Other
-- `355` - Script
-- `356` - Plugin Command
-
-## Tips for Best Results
-
-1. **Be Specific**: Provide exact IDs and clear descriptions
-2. **One Step at a Time**: For complex operations, break them down
-3. **Verify Changes**: Always ask Claude to show you the result after making changes
-4. **Backup First**: Ask Claude to retrieve current data before making destructive changes
-5. **Use Search**: When you don't know IDs, use search tools first
-
-## Error Handling
-
-If you encounter errors:
-
-1. **"Actor not found"**: Check the actor ID is correct
-2. **"Map not found"**: Verify the map ID exists in your project
-3. **"Invalid project path"**: Ensure RPGMAKER_PROJECT_PATH is set correctly
-4. **File permission errors**: Make sure the RPG Maker XP editor is closed
-
-## Combining Multiple Operations
-
-You can ask Claude to perform multiple operations in sequence:
-
-**User**: "Create a new actor named 'Thief', add them to the starting party, and create an event on map 1 that lets the player recruit them"
-
-Claude will:
-1. Create the actor
-2. Update the system's party members
-3. Create an appropriate recruitment event
+**The model keeps inventing MZ field names**
+Point it at the [XP is not MZ](#xp-is-not-mz) table above, or ask it to read
+the tool schema before calling.
