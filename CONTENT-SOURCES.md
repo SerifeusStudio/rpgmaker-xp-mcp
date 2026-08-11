@@ -1,16 +1,19 @@
 # RPG Maker XP content sources — curated catalog (June 2026)
 
 XP "plugins" are **RGSS1 Ruby scripts** (not MV/MZ JS plugins). This catalog
-covers where to get scripts and assets, with licensing verdicts. Compiled
-from a three-agent web research pass; full details in the conversation that
-produced it. Local ready-to-use copies live in `library/`.
+covers where to get scripts and assets, with licensing verdicts. Licences were
+read from each source at the date above — **re-check before you ship**, since
+terms change and this catalog does not redistribute anything.
 
 > ⚠ **Engine-version trap**: many "RGSS" repos/scripts are RGSS3 (VX Ace)
 > and will NOT run in XP. Always confirm RGSS1/XP before installing.
 
 ---
 
-## Tier 1 — clean-license scripts (cloned into `library/`)
+## Tier 1 — clean-license scripts
+
+Nothing here is redistributed — clone each from its source. The `library/…`
+paths are just the local convention this project's docs and tests assume.
 
 | Local folder | Source | License | Contents |
 |---|---|---|---|

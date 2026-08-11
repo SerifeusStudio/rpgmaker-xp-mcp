@@ -1,10 +1,11 @@
 # RPG Maker XP / RGSS1 — collected engineering wisdom
 
 Everything learned building and hardening the `rpgmaker-xp` MCP server
-(June 2026). Sources: the official RGSS1 reference decompiled from this
-machine's `RPGXP.chm`, the default engine scripts decompressed from
+(June 2026). Sources: the official RGSS1 reference from `RPGXP.chm`, the
+default engine scripts decompressed from a local install's template
 `Scripts.rxdata`, byte-level inspection of the template database, and a
-22-source verified web research pass. Local artifacts live in `research/`.
+survey of 22 existing tools and references. How each finding was established
+is set out in [`research/REPORT.md`](research/REPORT.md).
 
 ---
 

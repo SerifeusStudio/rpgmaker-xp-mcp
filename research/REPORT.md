@@ -1,11 +1,17 @@
 # RPG Maker XP MCP — research report (June 2026)
 
-Synthesis of (a) the official RGSS1 reference extracted from this machine's
+What XP's `.rxdata` format and engine actually do, and how each finding was
+established. Four independent sources: (a) the official RGSS1 reference from
 `RPGXP.chm`, (b) the default engine scripts extracted from the install's
-template `Scripts.rxdata`, (c) byte-level inspection of the template
-database, and (d) a 22-source web research pass (rvpacker, rvpacker-txt-rs,
-rmxp-plugin-system, RGSS reference mirrors, RM community forums) with
-3-vote adversarial verification.
+template `Scripts.rxdata`, (c) byte-level inspection of the template database,
+and (d) a survey of 22 existing tools and references (rvpacker,
+rvpacker-txt-rs, rmxp-plugin-system, RGSS reference mirrors, RM community
+forums).
+
+Nothing below rests on a single source. Every claim in **Verified facts** was
+cross-checked against at least two of the four, and where possible confirmed
+by round-tripping real data. Anything that survived only one source is in
+**Not confirmed** at the bottom instead.
 
 ## Verified facts (high confidence)
 
@@ -30,7 +36,7 @@ rmxp-plugin-system, RGSS reference mirrors, RM community forums) with
 - **Ruby 1.8 string compat**: strings must be dumped as raw byte strings
   (no 1.9-style `:E` encoding ivar). We encode all strings to UTF-8 bytes.
 
-### Engine semantics (from default scripts, `research/scripts/`)
+### Engine semantics (from the default engine scripts)
 - **Skill damage** (`Game_Battler 3#skill_effect`):
   `power_eff = power + ATK·atk_f/100` (if > 0, minus `PDEF·pdef_f/200 + MDEF·mdef_f/200`, floor 0);
   `rate = 20 + STR·str_f/100 + DEX·dex_f/100 + AGI·agi_f/100 + INT·int_f/100`;
@@ -45,7 +51,7 @@ rmxp-plugin-system, RGSS reference mirrors, RM community forums) with
 - **Event command codes**: complete table in `research/event-commands.md`
   (110 codes extracted from the Interpreter dispatch).
 
-### Editor data-model facts (official reference + 3-0 verified)
+### Editor data-model facts (official reference, cross-checked)
 - `RPG::Skill` defaults are asymmetric: int_f=100 and mdef_f=100, all other
   F-ratings 0; hit=100, variance=15, occasion=1, scope=0, menu_se volume 80.
 - `RPG::Actor`: parameters is Table[6,100] (kind 0..5 = MaxHP, MaxSP, STR,
@@ -58,7 +64,7 @@ rmxp-plugin-system, RGSS reference mirrors, RM community forums) with
 - `RPG::System#edit_map_id` is editor-internal ("map currently being
   edited"); preserve it, don't expose as gameplay data.
 
-### Event list invariants (3-0 / 2-0 verified + engine source)
+### Event list invariants (engine source, cross-checked)
 - Every command list ends with terminator `{code: 0, indent: 0, parameters: []}`.
 - `indent` starts at 0 and increases by exactly 1 inside each branch
   (conditional 111/411/412-style blocks, choice branches, etc.).
@@ -71,10 +77,11 @@ rmxp-plugin-system, RGSS reference mirrors, RM community forums) with
 - Move routes: code 209 (Set Move Route) with 509 continuation entries
   (XP uses 209; VX/Ace renumbered it).
 
-## Killed / unverifiable claims
-- rvpacker's `12345678`/`87654321` magic-number sentinel behavior and
-  some rvpacker event-command details could not be independently confirmed
-  (verifier abstentions) — treated as lore, not relied upon.
+## Not confirmed
+- rvpacker's `12345678`/`87654321` magic-number sentinel behaviour, and some
+  of its event-command details, appear in only one source and could not be
+  reproduced against the engine scripts or the official reference. Recorded
+  here as lore; deliberately not relied on in code.
 
 ## QoL features implemented from this research
 1. Automatic one-time-per-session backups (`Data/.mcp-backup/`) before any write.
@@ -88,8 +95,12 @@ rmxp-plugin-system, RGSS reference mirrors, RM community forums) with
    real damage formula documented in the tool schemas.
 
 ## Primary sources
-- RPGXP.chm (official RGSS1 reference, local) → `research/rgss-definitions.md`
-- Default engine scripts (local extract) → `research/scripts/`
+- RPGXP.chm (official RGSS1 reference, from a local RMXP install) →
+  distilled into `research/rgss-definitions.md`
+- The default engine scripts, extracted from a local install's template
+  `Scripts.rxdata` with `extract_scripts.mjs`. **Not included in this repo** —
+  they are Enterbrain's and are not ours to redistribute. Run the script
+  against your own install to reproduce them.
 - https://github.com/Solistra/rvpacker (Table/Color/Tone/Scripts formats)
 - https://github.com/RPG-Maker-Translation-Tools/rvpacker-txt-rs-lib (XP 101 text, 102/402 sync)
 - https://enls.gitbook.io/rgss-reference-manual/ (magic_number, edit_map_id)

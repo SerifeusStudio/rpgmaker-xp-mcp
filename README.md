@@ -316,8 +316,7 @@ a cross-verified 48-variant quadrant table). Options: `layers`, `scale`,
 `Data/.mcp-preview/map<NNN>.png` and returns the path.
 
 *Layout preview only* — no priority/overhead draw order, no fog, panorama or
-weather, and autotile animation uses frame 0. Design notes:
-[SCOPING-map-renderer.md](SCOPING-map-renderer.md).
+weather, and autotile animation uses frame 0.
 </details>
 
 <details>
@@ -453,11 +452,11 @@ absent; the autotile-table integrity check always runs.
 | **[EXAMPLES.md](EXAMPLES.md)** | Worked examples — what to ask for, and the tool calls it produces |
 | **[AUTHORING-XP.md](AUTHORING-XP.md)** | Writing for XP, and how this server acts as a governance layer to keep a project canonical as humans and models both edit it |
 | **[MAP-DESIGN.md](MAP-DESIGN.md)** | Level design: the three-layer model, priority and passability, multi-tile object rules, composition |
+| **[SKILL_CREATION_GUIDE.md](SKILL_CREATION_GUIDE.md)** | XP's damage model in depth, and the skill creation tools |
 | **[TILESET-CATALOG.md](TILESET-CATALOG.md)** | Evidence-first tile identification, object grouping, confidence rules |
 | **[CONTENT-SOURCES.md](CONTENT-SOURCES.md)** | Licence-vetted catalogue of RGSS1 script libraries you can install with `create_script` |
 | **[WISDOM.md](WISDOM.md)** | Collected engineering notes: Marshal layer, battle math, event system, coexisting with the editor |
-| **[research/](research/)** | Event command table, RGSS class definitions, the decoder bug report, engineering surveys |
-| **SCOPING-\*.md / SPEC-\*.md** | Design notes for the renderer, map authoring, graphics generation, resource import |
+| **[research/](research/)** | Event command table, RGSS class definitions, the decoder bug report |
 
 ---
 
