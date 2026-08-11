@@ -1,0 +1,26 @@
+# Default: normalise text on commit, native on checkout.
+* text=auto
+
+# RPG Maker XP / RGSS artefacts are BINARY. Never let git touch line endings
+# in these — a mangled .rxdata is a corrupted game project.
+*.rxdata  binary
+*.rgssad  binary
+*.rgss2a  binary
+*.rgss3a  binary
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.ogg binary
+*.mid binary
+*.chm binary
+
+# RGSS scripts are Ruby 1.8 text; keep LF so RGSS104E reads them predictably.
+*.rb text eol=lf
+
+# Source + tests: LF
+*.ts  text eol=lf
+*.mjs text eol=lf
+*.js  text eol=lf
+*.json text eol=lf
+*.md  text eol=lf
