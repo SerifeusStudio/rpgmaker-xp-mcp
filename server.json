@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.serifeusstudio/rpgmaker-xp-mcp",
+  "name": "io.github.SerifeusStudio/rpgmaker-xp-mcp",
   "description": "Author RPG Maker XP games in natural language: read, write and render RGSS1 .rxdata.",
   "repository": {
     "url": "https://github.com/SerifeusStudio/rpgmaker-xp-mcp",
     "source": "github"
   },
-  "version": "1.1.2",
+  "version": "1.1.3",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "rpgmaker-xp-mcp",
-      "version": "1.1.2",
+      "version": "1.1.3",
       "transport": {
         "type": "stdio"
       },
