@@ -384,8 +384,12 @@ have dedicated codecs. On save, strings are written as **raw byte strings** with
 no Ruby 1.9 encoding ivars, or XP's Ruby 1.8 / RGSS104E refuses to load them.
 The game title lives in `Game.ini`, not in System data — unlike MZ.
 
-Round-trips of all 15 template `.rxdata` files from the RMXP install are
-byte-identical.
+Round-trips of 15 of the 16 template `.rxdata` files from the RMXP install are
+byte-identical. The exception is `Scripts.rxdata`, which the round-trip test
+excludes rather than fails: it stores zlib-compressed source as *binary*
+strings, so it needs the raw path (`readRxdataRaw`) instead of the UTF-8 one
+the rest of the database uses. The script tools handle it correctly; only the
+round-trip test skips it.
 </details>
 
 <details>
