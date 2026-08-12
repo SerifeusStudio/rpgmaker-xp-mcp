@@ -1,6 +1,7 @@
 {
   "name": "rpgmaker-xp-mcp",
-  "version": "1.1.1",
+  "version": "1.1.2",
+  "mcpName": "io.github.serifeusstudio/rpgmaker-xp-mcp",
   "description": "Author RPG Maker XP games in natural language — an MCP server that reads, writes, and renders RGSS1 .rxdata projects (actors, skills, items, maps, events, scripts) directly.",
   "type": "module",
   "main": "dist/index.js",
